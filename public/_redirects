@@ -1,0 +1,24 @@
+# Redirects for Cloudflare Pages
+
+# Admin redirects
+/admin /admin-dashboard 301
+/admin/* /admin-dashboard/:splat 301
+
+# Authentication redirects
+/login /auth/signin 301
+/register /auth/register 301
+/signup /auth/register 301
+
+# Legacy routes (if any)
+/dashboard /user-dashboard 301
+/profile /account 301
+
+# Handle trailing slashes
+/admin-dashboard/ /admin-dashboard 301
+/user-dashboard/ /user-dashboard 301
+/account-dashboard/ /account-dashboard 301
+/packer-dashboard/ /packer-dashboard 301
+/delivery-dashboard/ /delivery-dashboard 301
+
+# Fallback for SPA routing
+/* /index.html 200

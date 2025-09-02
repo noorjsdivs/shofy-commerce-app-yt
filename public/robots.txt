@@ -1,0 +1,11 @@
+# *
+User-agent: *
+Allow: /
+Disallow: /admin/*
+Disallow: /dashboard/*
+
+# Host
+Host: https://shofy.reactbd.com
+
+# Sitemaps
+Sitemap: https://shofy.reactbd.com/sitemap.xml

@@ -1,0 +1,702 @@
+import PaidVersionOnly from "@/components/admin/PaidVersionOnly";
+
+export default function AdminDashboardPage() {
+  return <PaidVersionOnly featureName="Admin Dashboard" />;
+}
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [stats, setStats] = useState<DashboardStats>({
+    totalOrders: 0,
+    totalUsers: 0,
+    totalRevenue: 0,
+    pendingOrders: 0,
+    completedOrders: 0,
+    activeUsers: 0,
+  });
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [isUpdatingOrder, setIsUpdatingOrder] = useState(false);
+
+  // Check authentication and role
+  useEffect(() => {
+    if (status === "loading") return;
+
+    if (!session?.user) {
+      router.push("/auth/signin");
+      return;
+    }
+
+    // @ts-ignore
+    if (session.user.role !== USER_ROLES.ADMIN) {
+      router.push("/account");
+      return;
+    }
+
+    fetchDashboardData();
+  }, [session, status]);
+
+  const fetchDashboardData = async () => {
+    try {
+      const [ordersResponse, usersResponse] = await Promise.all([
+        fetch("/api/orders"),
+        fetch("/api/admin/users"),
+      ]);
+
+      if (!ordersResponse.ok || !usersResponse.ok) {
+        throw new Error("Failed to fetch dashboard data");
+      }
+
+      const ordersData = await ordersResponse.json();
+      const usersData = await usersResponse.json();
+
+      setOrders(ordersData.orders || []);
+      setUsers(usersData);
+
+      // Calculate stats
+      const orders = ordersData.orders || [];
+      const newStats = {
+        totalOrders: orders.length,
+        totalUsers: usersData.length,
+        totalRevenue: orders.reduce(
+          (sum: number, order: Order) => sum + order.total,
+          0
+        ),
+        pendingOrders: orders.filter((order: Order) =>
+          [ORDER_STATUSES.PENDING, ORDER_STATUSES.CONFIRMED].includes(
+            order.status as any
+          )
+        ).length,
+        completedOrders: orders.filter(
+          (order: Order) => order.status === ORDER_STATUSES.DELIVERED
+        ).length,
+        activeUsers: usersData.filter((user: User) => user.orders > 0).length,
+      };
+      setStats(newStats);
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+      toast.error("Failed to load dashboard data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateOrderStatus = async (orderId: string, updates: any) => {
+    setIsUpdatingOrder(true);
+    try {
+      const response = await fetch("/api/admin/orders", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          orderId,
+          ...updates,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update order");
+
+      toast.success("Order updated successfully");
+      fetchDashboardData(); // Refresh data
+      setSelectedOrder(null);
+    } catch (error) {
+      console.error("Error updating order:", error);
+      toast.error("Failed to update order");
+    } finally {
+      setIsUpdatingOrder(false);
+    }
+  };
+
+  const updateUserRole = async (userId: string, role: string) => {
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId, role }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update user role");
+
+      toast.success("User role updated successfully");
+      fetchDashboardData(); // Refresh data
+    } catch (error) {
+      console.error("Error updating user role:", error);
+      toast.error("Failed to update user role");
+    }
+  };
+
+  const formatStatus = (status: string) => {
+    return status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case ORDER_STATUSES.PENDING:
+        return "bg-yellow-100 text-yellow-800";
+      case ORDER_STATUSES.CONFIRMED:
+        return "bg-blue-100 text-blue-800";
+      case ORDER_STATUSES.PROCESSING:
+        return "bg-indigo-100 text-indigo-800";
+      case ORDER_STATUSES.PACKED:
+        return "bg-purple-100 text-purple-800";
+      case ORDER_STATUSES.SHIPPED:
+        return "bg-orange-100 text-orange-800";
+      case ORDER_STATUSES.OUT_FOR_DELIVERY:
+        return "bg-cyan-100 text-cyan-800";
+      case ORDER_STATUSES.DELIVERED:
+      case ORDER_STATUSES.COMPLETED:
+        return "bg-green-100 text-green-800";
+      case ORDER_STATUSES.CANCELLED:
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case USER_ROLES.ADMIN:
+        return "bg-red-100 text-red-800";
+      case USER_ROLES.ACCOUNT:
+        return "bg-blue-100 text-blue-800";
+      case USER_ROLES.PACKER:
+        return "bg-yellow-100 text-yellow-800";
+      case USER_ROLES.DELIVERYMAN:
+        return "bg-green-100 text-green-800";
+      case USER_ROLES.USER:
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+          <p className="mt-2 text-gray-600">Manage your e-commerce platform</p>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="mb-8 flex flex-wrap gap-4">
+          <Link
+            href="/admin/orders"
+            className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Manage Orders
+          </Link>
+          <Link
+            href="/admin/users"
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Manage Users
+          </Link>
+          <Link
+            href="/admin/analytics"
+            className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors"
+          >
+            View Analytics
+          </Link>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="h-8 w-8 text-indigo-600 text-2xl flex items-center justify-center">
+                  📦
+                </div>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">
+                  Total Orders
+                </p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {stats.totalOrders}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="h-8 w-8 text-blue-600 text-2xl flex items-center justify-center">
+                  👥
+                </div>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Total Users</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {stats.totalUsers}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="h-8 w-8 text-green-600 text-2xl flex items-center justify-center">
+                  💰
+                </div>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">
+                  Total Revenue
+                </p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  ${stats.totalRevenue.toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="h-8 w-8 text-yellow-600 text-2xl flex items-center justify-center">
+                  ⏳
+                </div>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">
+                  Pending Orders
+                </p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {stats.pendingOrders}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="h-8 w-8 text-green-600 text-2xl flex items-center justify-center">
+                  ✅
+                </div>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Completed</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {stats.completedOrders}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="h-8 w-8 text-purple-600 text-2xl flex items-center justify-center">
+                  🔥
+                </div>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">
+                  Active Users
+                </p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {stats.activeUsers}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="bg-white rounded-lg shadow mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex">
+              <button
+                onClick={() => setActiveTab("overview")}
+                className={`py-4 px-6 text-sm font-medium border-b-2 ${
+                  activeTab === "overview"
+                    ? "border-indigo-500 text-indigo-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                Overview
+              </button>
+              <button
+                onClick={() => setActiveTab("orders")}
+                className={`py-4 px-6 text-sm font-medium border-b-2 ${
+                  activeTab === "orders"
+                    ? "border-indigo-500 text-indigo-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                Recent Orders
+              </button>
+              <button
+                onClick={() => setActiveTab("users")}
+                className={`py-4 px-6 text-sm font-medium border-b-2 ${
+                  activeTab === "users"
+                    ? "border-indigo-500 text-indigo-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                Users
+              </button>
+            </nav>
+          </div>
+
+          <div className="p-6">
+            {activeTab === "overview" && (
+              <div className="space-y-6">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Platform Overview
+                </h3>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Recent Activity */}
+                  <div>
+                    <h4 className="text-md font-medium text-gray-900 mb-4">
+                      Recent Activity
+                    </h4>
+                    <div className="space-y-3">
+                      {orders.slice(0, 5).map((order) => (
+                        <div
+                          key={order.id}
+                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {order.orderNumber}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {order.userName}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-gray-900">
+                              ${order.total.toFixed(2)}
+                            </p>
+                            <span
+                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
+                                order.status
+                              )}`}
+                            >
+                              {formatStatus(order.status)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* System Health */}
+                  <div>
+                    <h4 className="text-md font-medium text-gray-900 mb-4">
+                      System Health
+                    </h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                        <span className="text-sm font-medium text-gray-900">
+                          Database
+                        </span>
+                        <span className="text-sm text-green-600">
+                          ✅ Healthy
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                        <span className="text-sm font-medium text-gray-900">
+                          API Services
+                        </span>
+                        <span className="text-sm text-green-600">
+                          ✅ Online
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                        <span className="text-sm font-medium text-gray-900">
+                          Payment Gateway
+                        </span>
+                        <span className="text-sm text-green-600">
+                          ✅ Connected
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "orders" && (
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  Recent Orders
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Order
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Customer
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Payment
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Total
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {orders.slice(0, 10).map((order) => (
+                        <tr key={order.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {order.orderNumber}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {new Date(order.createdAt).toLocaleDateString()}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {order.userName}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {order.userEmail}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
+                                order.status
+                              )}`}
+                            >
+                              {formatStatus(order.status)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                order.paymentStatus === "paid"
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-yellow-100 text-yellow-800"
+                              }`}
+                            >
+                              {formatStatus(order.paymentStatus)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            ${order.total.toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => setSelectedOrder(order)}
+                              className="text-indigo-600 hover:text-indigo-900"
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "users" && (
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  Users Management
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          User
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Role
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Orders
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Total Spent
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {users.map((user) => (
+                        <tr key={user.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {user.name}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {user.email}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <select
+                              value={user.role}
+                              onChange={(e) =>
+                                updateUserRole(user.id, e.target.value)
+                              }
+                              className={`text-xs font-semibold rounded-full border-0 ${getRoleColor(
+                                user.role
+                              )}`}
+                            >
+                              <option value="user">Customer</option>
+                              <option value="admin">Admin</option>
+                              <option value="account">Accountant</option>
+                              <option value="packer">Packer</option>
+                              <option value="deliveryman">Deliveryman</option>
+                            </select>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {user.orders}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            ${user.totalSpent.toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <Link
+                              href={`/admin/users/${user.id}`}
+                              className="text-indigo-600 hover:text-indigo-900"
+                            >
+                              View Details
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Order Edit Modal */}
+      {selectedOrder && (
+        <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Edit Order - {selectedOrder.orderNumber}
+              </h3>
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Order Status
+                  </label>
+                  <select
+                    defaultValue={selectedOrder.status}
+                    onChange={(e) =>
+                      updateOrderStatus(selectedOrder.id, {
+                        status: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    disabled={isUpdatingOrder}
+                  >
+                    {Object.values(ORDER_STATUSES).map((status) => (
+                      <option key={status} value={status}>
+                        {formatStatus(status)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Payment Status
+                  </label>
+                  <select
+                    defaultValue={selectedOrder.paymentStatus}
+                    onChange={(e) =>
+                      updateOrderStatus(selectedOrder.id, {
+                        paymentStatus: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    disabled={isUpdatingOrder}
+                  >
+                    {Object.values(PAYMENT_STATUSES).map((status) => (
+                      <option key={status} value={status}>
+                        {formatStatus(status)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-medium text-gray-900 mb-2">
+                  Order Details
+                </h4>
+                <div className="bg-gray-50 p-3 rounded">
+                  <p>
+                    <strong>Customer:</strong> {selectedOrder.userName} (
+                    {selectedOrder.userEmail})
+                  </p>
+                  <p>
+                    <strong>Total:</strong> ${selectedOrder.total.toFixed(2)}
+                  </p>
+                  <p>
+                    <strong>Items:</strong> {selectedOrder.items.length}
+                  </p>
+                  <p>
+                    <strong>Created:</strong>{" "}
+                    {new Date(selectedOrder.createdAt).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

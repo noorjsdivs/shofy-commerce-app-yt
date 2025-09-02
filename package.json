@@ -1,0 +1,51 @@
+{
+  "name": "shofy",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "postbuild": "next-sitemap",
+    "deploy:check": "./deploy-check.sh",
+    "deploy:cf": "wrangler pages deploy .next --project-name=shofy-commerce --compatibility-date=2024-08-20",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@auth/firebase-adapter": "^2.10.0",
+    "@headlessui/react": "^2.2.7",
+    "@reduxjs/toolkit": "^2.8.2",
+    "@stripe/stripe-js": "^7.8.0",
+    "@types/bcryptjs": "^3.0.0",
+    "bcryptjs": "^3.0.2",
+    "chalk-ts": "^1.0.0",
+    "firebase": "^12.1.0",
+    "firebase-admin": "^12.7.0",
+    "framer-motion": "^12.23.12",
+    "next": "15.4.6",
+    "next-auth": "5.0.0-beta.29",
+    "next-sitemap": "^4.2.3",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-firebase-hooks": "^5.1.1",
+    "react-hot-toast": "^2.5.2",
+    "react-icons": "^5.5.0",
+    "react-paginate": "^8.3.0",
+    "react-redux": "^9.2.0",
+    "redux-persist": "^6.0.0",
+    "stripe": "^18.4.0",
+    "tailwind-merge": "^3.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.11",
+    "@types/node": "^24.2.1",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "eslint": "^9.33.0",
+    "eslint-config-next": "15.4.6",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.9.2"
+  }
+}
