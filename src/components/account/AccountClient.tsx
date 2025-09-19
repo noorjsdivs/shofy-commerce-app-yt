@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import ProfileEditForm from "@/components/account/ProfileEditForm";
 import Sidebar from "@/components/account/Sidebar";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useUserSync } from "@/hooks/useUserSync";
 
 interface UserProfile {
   firstName: string;
@@ -25,12 +27,16 @@ interface Address {
 
 export default function AccountClient() {
   const { data: session, update } = useSession();
+
+  // Sync user data between session and Redux store
+  useUserSync();
+
+  const { user, isAdmin, isAuthenticated, userRole } = useCurrentUser();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [orderCount, setOrderCount] = useState(0);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [updateLoading, setUpdateLoading] = useState(false);
-  const [userRole, setUserRole] = useState<string>("user");
 
   useEffect(() => {
     if (session?.user?.email) {
@@ -55,10 +61,7 @@ export default function AccountClient() {
         setOrderCount(data.orders.length);
       }
 
-      // Set user role
-      if (data.role) {
-        setUserRole(data.role);
-      }
+      // User role is now available from the store via useCurrentUser hook
 
       setLoading(false);
     } catch (err) {
@@ -195,6 +198,86 @@ export default function AccountClient() {
             </div>
             <div className="text-gray-600">Years with Us</div>
           </div>
+        </div>
+
+        {/* User Information from Store */}
+        <div className="bg-blue-50 rounded-lg p-6 mb-8">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Current User Information (From Store)
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <p>
+                <span className="font-medium">ID:</span>{" "}
+                {user?.id || "Not available"}
+              </p>
+              <p>
+                <span className="font-medium">Name:</span>{" "}
+                {user?.name || "Not available"}
+              </p>
+              <p>
+                <span className="font-medium">Email:</span>{" "}
+                {user?.email || "Not available"}
+              </p>
+              <p>
+                <span className="font-medium">Role:</span>{" "}
+                <span
+                  className={`px-2 py-1 rounded text-xs ${
+                    userRole === "admin"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-green-100 text-green-800"
+                  }`}
+                >
+                  {userRole}
+                </span>
+              </p>
+            </div>
+            <div>
+              <p>
+                <span className="font-medium">Is Admin:</span>{" "}
+                <span
+                  className={
+                    isAdmin ? "text-red-600 font-bold" : "text-green-600"
+                  }
+                >
+                  {isAdmin ? "Yes" : "No"}
+                </span>
+              </p>
+              <p>
+                <span className="font-medium">Is Authenticated:</span>{" "}
+                <span
+                  className={
+                    isAuthenticated ? "text-green-600" : "text-red-600"
+                  }
+                >
+                  {isAuthenticated ? "Yes" : "No"}
+                </span>
+              </p>
+              <p>
+                <span className="font-medium">Provider:</span>{" "}
+                {user?.provider || "Not available"}
+              </p>
+              <p>
+                <span className="font-medium">Created At:</span>{" "}
+                {user?.createdAt
+                  ? new Date(user.createdAt).toLocaleDateString()
+                  : "Not available"}
+              </p>
+            </div>
+          </div>
+          {user?.profile && (
+            <div className="mt-4 pt-4 border-t border-blue-200">
+              <p>
+                <span className="font-medium">Profile:</span>
+              </p>
+              <div className="ml-4 text-xs text-gray-600">
+                <p>First Name: {user.profile.firstName}</p>
+                <p>Last Name: {user.profile.lastName}</p>
+                <p>Phone: {user.profile.phone || "Not provided"}</p>
+                <p>Addresses: {user.profile.addresses?.length || 0} saved</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Quick Actions */}

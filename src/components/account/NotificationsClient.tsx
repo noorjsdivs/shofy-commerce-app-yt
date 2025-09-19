@@ -1,10 +1,8 @@
 "use client";
 
-import { useSession } from "next-auth/react";
 import { useState } from "react";
 
 export default function NotificationsClient() {
-  const { data: session } = useSession();
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
   const [orderUpdates, setOrderUpdates] = useState(true);

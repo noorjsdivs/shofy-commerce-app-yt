@@ -44,12 +44,10 @@ export default function ShippingAddressSelector({
       }
 
       const data = await response.json();
-      console.log("Fetched user data:", data);
 
       if (data.profile?.addresses && Array.isArray(data.profile.addresses)) {
         const addressList = data.profile.addresses;
         setAddresses(addressList);
-        console.log("Addresses set:", addressList);
 
         // Auto-select default address or first address
         const defaultAddress = addressList.find(
@@ -85,8 +83,6 @@ export default function ShippingAddressSelector({
         id: Date.now().toString(),
       };
 
-      console.log("Saving address:", newAddress);
-
       const response = await fetch("/api/user/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -97,8 +93,6 @@ export default function ShippingAddressSelector({
       });
 
       if (response.ok) {
-        const data = await response.json();
-        console.log("Address saved successfully:", data);
         await fetchAddresses();
         setShowAddForm(false);
         // Auto-select the newly added address

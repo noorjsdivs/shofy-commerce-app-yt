@@ -36,7 +36,17 @@ export default function AdminDashboardClient() {
       const response = await fetch("/api/admin/stats");
       if (response.ok) {
         const data = await response.json();
-        setStats(data);
+        // Ensure numeric values are properly converted
+        const normalizedStats = {
+          ...data,
+          totalUsers: Number(data.totalUsers) || 0,
+          totalOrders: Number(data.totalOrders) || 0,
+          totalRevenue: Number(data.totalRevenue) || 0,
+          totalProducts: Number(data.totalProducts) || 0,
+          pendingOrders: Number(data.pendingOrders) || 0,
+          completedOrders: Number(data.completedOrders) || 0,
+        };
+        setStats(normalizedStats);
       }
     } catch (error) {
       console.error("Error fetching admin stats:", error);

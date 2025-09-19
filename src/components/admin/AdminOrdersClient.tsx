@@ -4,18 +4,11 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { AdminTableSkeleton } from "./AdminSkeletons";
 import { toast } from "react-hot-toast";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
   FiPackage,
-  FiTruck,
-  FiCheck,
-  FiClock,
   FiX,
   FiEdit2,
-  FiDollarSign,
-  FiUser,
-  FiCalendar,
-  FiMapPin,
-  FiMessageSquare,
   FiRefreshCw,
   FiTrash2,
   FiSave,
@@ -23,13 +16,7 @@ import {
   FiEye,
 } from "react-icons/fi";
 import {
-  ORDER_STATUSES,
-  PAYMENT_STATUSES,
-  PAYMENT_METHODS,
   getStatusDisplayInfo,
-  getPaymentStatusDisplayInfo,
-  getNextPossibleStatuses,
-  canUpdatePaymentStatus,
   OrderStatus,
   PaymentStatus,
   PaymentMethod,
@@ -51,7 +38,7 @@ interface Order {
   id: string;
   orderId?: string;
   items: OrderItem[];
-  total: number;
+  amount: number;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod;
@@ -109,6 +96,7 @@ const paymentStatusColors = {
 
 export default function AdminOrdersClient() {
   const { data: session } = useSession();
+  const { user, isAdmin } = useCurrentUser();
   const [orders, setOrders] = useState<Order[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,13 +113,18 @@ export default function AdminOrdersClient() {
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
-  const [ordersPerPage] = useState(10);
+  const [ordersPerPage] = useState(20);
 
   // Modal states
   const [viewOrderModal, setViewOrderModal] = useState<Order | null>(null);
   const [deleteOrderModal, setDeleteOrderModal] = useState<Order | null>(null);
   const [deleteAllModal, setDeleteAllModal] = useState(false);
+  const [deleteSelectedModal, setDeleteSelectedModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Selected orders state
+  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
+  const [selectAll, setSelectAll] = useState(false);
 
   useEffect(() => {
     if (session?.user?.email) {
@@ -325,7 +318,32 @@ export default function AdminOrdersClient() {
 
     setFilteredOrders(filtered);
     setCurrentPage(1); // Reset to first page when filters change
+
+    // Clear selections when filters change
+    setSelectedOrders([]);
+    setSelectAll(false);
   }, [orders, searchTerm, statusFilter, paymentFilter]);
+
+  // Calculate pagination - moved up to use in effects
+  const indexOfLastOrder = currentPage * ordersPerPage;
+  const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
+  const currentOrders = filteredOrders.slice(
+    indexOfFirstOrder,
+    indexOfLastOrder
+  );
+  const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
+
+  // Update selectAll state based on selected orders
+  useEffect(() => {
+    if (currentOrders.length > 0) {
+      const allCurrentOrdersSelected = currentOrders.every((order) =>
+        selectedOrders.includes(order.id)
+      );
+      setSelectAll(allCurrentOrdersSelected && selectedOrders.length > 0);
+    } else {
+      setSelectAll(false);
+    }
+  }, [selectedOrders, currentOrders]);
 
   const handleUpdateStatus = async (orderId: string, status: string) => {
     try {
@@ -373,20 +391,25 @@ export default function AdminOrdersClient() {
   const confirmDeleteOrder = async () => {
     if (!deleteOrderModal) return;
 
+    setIsDeleting(true);
     try {
       const response = await fetch(`/api/admin/orders/${deleteOrderModal.id}`, {
         method: "DELETE",
       });
 
       if (response.ok) {
+        toast.success("Order deleted successfully");
         await fetchOrders();
         setDeleteOrderModal(null);
       } else {
-        alert("Failed to delete order");
+        const errorData = await response.json();
+        toast.error(errorData.error || "Failed to delete order");
       }
     } catch (error) {
       console.error("Error deleting order:", error);
-      alert("Error deleting order");
+      toast.error("Error deleting order");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -401,29 +424,77 @@ export default function AdminOrdersClient() {
       });
 
       if (response.ok) {
+        toast.success("All orders deleted successfully");
         await fetchOrders();
         setDeleteAllModal(false);
       } else {
-        console.error("Failed to delete all orders");
+        const errorData = await response.json();
+        toast.error(errorData.error || "Failed to delete all orders");
       }
     } catch (error) {
       console.error("Error deleting all orders:", error);
+      toast.error("Error deleting all orders");
     } finally {
       setIsDeleting(false);
     }
   };
 
-  // Calculate pagination
-  const indexOfLastOrder = currentPage * ordersPerPage;
-  const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
-  const currentOrders = filteredOrders.slice(
-    indexOfFirstOrder,
-    indexOfLastOrder
-  );
-  const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
+  // Selection handlers
+  const handleSelectOrder = (orderId: string) => {
+    setSelectedOrders((prev) =>
+      prev.includes(orderId)
+        ? prev.filter((id) => id !== orderId)
+        : [...prev, orderId]
+    );
+  };
 
-  // Check if user is admin
-  const isAdmin = session?.user?.role === "admin";
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedOrders([]);
+    } else {
+      setSelectedOrders(currentOrders.map((order) => order.id));
+    }
+    setSelectAll(!selectAll);
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedOrders.length === 0) {
+      toast.error("Please select orders to delete");
+      return;
+    }
+    setDeleteSelectedModal(true);
+  };
+
+  const confirmDeleteSelected = async () => {
+    if (selectedOrders.length === 0) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch("/api/admin/orders/bulk-delete-selected", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ orderIds: selectedOrders }),
+      });
+
+      if (response.ok) {
+        toast.success(`Successfully deleted ${selectedOrders.length} orders`);
+        setSelectedOrders([]);
+        setSelectAll(false);
+        await fetchOrders();
+        setDeleteSelectedModal(false);
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || "Failed to delete selected orders");
+      }
+    } catch (error) {
+      console.error("Error deleting selected orders:", error);
+      toast.error("Error deleting selected orders");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   if (loading) {
     return <AdminTableSkeleton rows={5} />;
@@ -439,6 +510,14 @@ export default function AdminOrdersClient() {
           </h2>
           {isAdmin && (
             <div className="flex items-center space-x-2">
+              <button
+                onClick={handleDeleteSelected}
+                className="flex items-center px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm"
+                disabled={selectedOrders.length === 0}
+              >
+                <FiTrash2 className="mr-2 h-4 w-4" />
+                Delete Selected ({selectedOrders.length})
+              </button>
               <button
                 onClick={() => setDeleteAllModal(true)}
                 className="flex items-center px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
@@ -513,28 +592,36 @@ export default function AdminOrdersClient() {
 
       {/* Orders Table */}
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
+        <table className="w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                <input
+                  type="checkbox"
+                  checked={selectAll && currentOrders.length > 0}
+                  onChange={handleSelectAll}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+              </th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                 Order
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                 Customer
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                 Status
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                 Payment
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                 Amount
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                 Date
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
                 Actions
               </th>
             </tr>
@@ -542,35 +629,43 @@ export default function AdminOrdersClient() {
           <tbody className="bg-white divide-y divide-gray-200">
             {currentOrders.map((order) => (
               <tr key={order.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-3 py-4 whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={selectedOrders.includes(order.id)}
+                    onChange={() => handleSelectOrder(order.id)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                </td>
+                <td className="px-3 py-4 whitespace-nowrap">
                   <div className="flex items-center">
-                    <FiPackage className="h-5 w-5 text-gray-400 mr-3" />
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">
+                    <FiPackage className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">
                         #{order.orderId || order.id.slice(-8)}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-xs text-gray-500">
                         {order.items?.length || 0} items
                       </div>
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">
+                <td className="px-3 py-4 whitespace-nowrap">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-900 truncate">
                       {order.customerName || "No Name"}
                     </div>
-                    <div className="text-sm text-gray-500">
+                    <div className="text-xs text-gray-500 truncate">
                       {order.customerEmail}
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-3 py-4 whitespace-nowrap">
                   {editingOrder?.id === order.id ? (
                     <select
                       value={newStatus}
                       onChange={(e) => setNewStatus(e.target.value)}
-                      className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full"
                     >
                       <option value="">Select Status</option>
                       <option value="pending">Pending</option>
@@ -592,12 +687,12 @@ export default function AdminOrdersClient() {
                     </span>
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-3 py-4 whitespace-nowrap">
                   {editingPayment?.id === order.id ? (
                     <select
                       value={newPaymentStatus}
                       onChange={(e) => setNewPaymentStatus(e.target.value)}
-                      className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full"
                     >
                       <option value="">Select Payment</option>
                       <option value="paid">Paid</option>
@@ -607,7 +702,7 @@ export default function AdminOrdersClient() {
                       <option value="partial">Partial</option>
                     </select>
                   ) : (
-                    <div className="space-y-1">
+                    <div>
                       <span
                         className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                           paymentStatusColors[
@@ -618,31 +713,31 @@ export default function AdminOrdersClient() {
                         {order.paymentStatus || "Unknown"}
                       </span>
                       {order.paymentMethod && (
-                        <div className="text-xs text-gray-500 capitalize">
+                        <div className="text-xs text-gray-500 capitalize mt-1 truncate">
                           {order.paymentMethod}
                         </div>
                       )}
                     </div>
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  <PriceFormat amount={order.total || 0} />
+                <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  <PriceFormat amount={order.amount || 0} />
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                   {order.createdAt
                     ? new Date(order.createdAt).toLocaleDateString()
                     : "N/A"}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
                   {editingOrder?.id === order.id ? (
-                    <div className="flex space-x-2">
+                    <div className="flex items-center space-x-1">
                       <button
                         onClick={() => handleUpdateStatus(order.id, newStatus)}
                         disabled={!newStatus}
                         className="p-1 text-green-600 hover:text-green-900 disabled:text-gray-400 transition-colors"
                         title="Save Status"
                       >
-                        <FiSave size={16} />
+                        <FiSave size={14} />
                       </button>
                       <button
                         onClick={() => {
@@ -652,11 +747,11 @@ export default function AdminOrdersClient() {
                         className="p-1 text-gray-600 hover:text-gray-900 transition-colors"
                         title="Cancel"
                       >
-                        <FiX size={16} />
+                        <FiX size={14} />
                       </button>
                     </div>
                   ) : editingPayment?.id === order.id ? (
-                    <div className="flex space-x-2">
+                    <div className="flex items-center space-x-1">
                       <button
                         onClick={() =>
                           handleUpdatePaymentStatus(order.id, newPaymentStatus)
@@ -665,7 +760,7 @@ export default function AdminOrdersClient() {
                         className="p-1 text-green-600 hover:text-green-900 disabled:text-gray-400 transition-colors"
                         title="Save Payment"
                       >
-                        <FiSave size={16} />
+                        <FiSave size={14} />
                       </button>
                       <button
                         onClick={() => {
@@ -675,17 +770,17 @@ export default function AdminOrdersClient() {
                         className="p-1 text-gray-600 hover:text-gray-900 transition-colors"
                         title="Cancel"
                       >
-                        <FiX size={16} />
+                        <FiX size={14} />
                       </button>
                     </div>
                   ) : (
-                    <div className="flex space-x-2">
+                    <div className="flex items-center space-x-1">
                       <button
                         onClick={() => setViewOrderModal(order)}
                         className="p-1 text-blue-600 hover:text-blue-900 transition-colors"
                         title="View Details"
                       >
-                        <FiEye size={16} />
+                        <FiEye size={14} />
                       </button>
                       <button
                         onClick={() => {
@@ -695,7 +790,7 @@ export default function AdminOrdersClient() {
                         className="p-1 text-indigo-600 hover:text-indigo-900 transition-colors"
                         title="Edit Status"
                       >
-                        <FiEdit2 size={16} />
+                        <FiEdit2 size={14} />
                       </button>
                       <button
                         onClick={() => {
@@ -713,7 +808,7 @@ export default function AdminOrdersClient() {
                           className="p-1 text-red-600 hover:text-red-900 transition-colors"
                           title="Delete Order"
                         >
-                          <FiTrash2 size={16} />
+                          <FiTrash2 size={14} />
                         </button>
                       )}
                     </div>
@@ -724,7 +819,6 @@ export default function AdminOrdersClient() {
           </tbody>
         </table>
       </div>
-
       {/* Empty State */}
       {filteredOrders.length === 0 && !loading && (
         <div className="px-6 py-12 text-center">
@@ -802,7 +896,7 @@ export default function AdminOrdersClient() {
                       Total Amount
                     </dt>
                     <dd className="text-sm text-gray-900">
-                      <PriceFormat amount={viewOrderModal.total || 0} />
+                      <PriceFormat amount={viewOrderModal.amount || 0} />
                     </dd>
                   </div>
                   <div>
@@ -920,27 +1014,63 @@ export default function AdminOrdersClient() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-md w-full">
             <div className="px-6 py-4">
-              <h3 className="text-lg font-medium text-gray-900">
+              <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                <FiTrash2 className="mr-2 h-5 w-5 text-red-600" />
                 Delete Order
               </h3>
               <p className="mt-2 text-sm text-gray-600">
-                Are you sure you want to delete order #
-                {deleteOrderModal.orderId || deleteOrderModal.id.slice(-8)}?
-                This action cannot be undone.
+                Are you sure you want to delete order{" "}
+                <strong>
+                  #{deleteOrderModal.orderId || deleteOrderModal.id.slice(-8)}
+                </strong>
+                ?
               </p>
+              <div className="mt-3 bg-gray-50 rounded-lg p-3">
+                <div className="text-sm text-gray-700">
+                  <div>
+                    <strong>Customer:</strong> {deleteOrderModal.userEmail}
+                  </div>
+                  <div>
+                    <strong>Amount:</strong>{" "}
+                    <PriceFormat amount={deleteOrderModal.amount} />
+                  </div>
+                  <div>
+                    <strong>Items:</strong> {deleteOrderModal.items.length}{" "}
+                    item(s)
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-sm text-red-800">
+                  <strong>Warning:</strong> This action cannot be undone. The
+                  order will be permanently removed from the database.
+                </p>
+              </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
               <button
                 onClick={() => setDeleteOrderModal(null)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                disabled={isDeleting}
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDeleteOrder}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center"
+                disabled={isDeleting}
               >
-                Delete
+                {isDeleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <FiTrash2 className="mr-2 h-4 w-4" />
+                    Delete Order
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -975,6 +1105,58 @@ export default function AdminOrdersClient() {
                 disabled={isDeleting}
               >
                 {isDeleting ? "Deleting..." : "Delete All"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Selected Orders Modal */}
+      {deleteSelectedModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="px-6 py-4">
+              <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                <FiTrash2 className="mr-2 h-5 w-5 text-red-600" />
+                Delete Selected Orders
+              </h3>
+              <p className="mt-2 text-sm text-gray-600">
+                Are you sure you want to delete{" "}
+                <strong>{selectedOrders.length}</strong> selected orders? This
+                action will permanently remove these orders from the database
+                and cannot be undone.
+              </p>
+              <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-sm text-yellow-800">
+                  <strong>Warning:</strong> This will delete the orders from
+                  both the user accounts and the orders collection in Firestore.
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+              <button
+                onClick={() => setDeleteSelectedModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteSelected}
+                className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center"
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <FiTrash2 className="mr-2 h-4 w-4" />
+                    Delete {selectedOrders.length} Orders
+                  </>
+                )}
               </button>
             </div>
           </div>

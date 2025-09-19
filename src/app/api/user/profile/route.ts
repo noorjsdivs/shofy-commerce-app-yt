@@ -61,15 +61,11 @@ export async function PUT(request: NextRequest) {
 
     const userDoc = snapshot.docs[0];
     const userData = userDoc.data();
-    console.log("User data before update:", JSON.stringify(userData, null, 2));
 
     let addresses = userData.profile?.addresses || [];
-    console.log("Current addresses:", addresses);
 
     // If addAddress is provided, push to addresses array
     if (addAddress) {
-      console.log("Adding new address:", addAddress);
-
       // If this is marked as default, remove default from all others
       if (addAddress.isDefault) {
         addresses = addresses.map((addr: any) => ({
@@ -80,9 +76,6 @@ export async function PUT(request: NextRequest) {
 
       addresses = [...addresses, addAddress];
     } else if (address) {
-      // If address is provided, replace all addresses
-      console.log("Replacing all addresses:", address);
-
       // Ensure only one default address exists
       let hasDefault = false;
       address.forEach((addr: any) => {
@@ -95,8 +88,6 @@ export async function PUT(request: NextRequest) {
 
       addresses = address;
     }
-
-    console.log("Final addresses to save:", addresses);
 
     // Prepare update data, only include defined fields
     const updateData: any = {

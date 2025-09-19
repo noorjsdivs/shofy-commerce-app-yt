@@ -14,6 +14,8 @@ import {
   FiCalendar,
   FiShield,
   FiUserCheck,
+  FiChevronLeft,
+  FiChevronRight,
 } from "react-icons/fi";
 
 interface User {
@@ -34,6 +36,16 @@ export default function AdminUsersClient() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
+
+  // Multiple selection states
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [selectAll, setSelectAll] = useState(false);
+  const [showDeleteSelectedModal, setShowDeleteSelectedModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const usersPerPage = 10;
 
   useEffect(() => {
     fetchUsers();
@@ -106,6 +118,12 @@ export default function AdminUsersClient() {
         await fetchUsers(); // Refresh the data
         setShowDeleteModal(false);
         setUserToDelete(null);
+        // Reset to page 1 if current page would be empty
+        const remainingUsers = users.length - 1;
+        const maxPage = Math.ceil(remainingUsers / usersPerPage);
+        if (currentPage > maxPage && maxPage > 0) {
+          setCurrentPage(maxPage);
+        }
       } else {
         const errorData = await response.json();
         toast.error(errorData.error || "Failed to delete user");
@@ -119,6 +137,74 @@ export default function AdminUsersClient() {
   const confirmDeleteUser = (user: User) => {
     setUserToDelete(user);
     setShowDeleteModal(true);
+  };
+
+  // Multiple selection handlers
+  const handleSelectUser = (userId: string) => {
+    setSelectedUsers((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectAll) {
+      // Deselect all users on current page
+      setSelectedUsers((prev) =>
+        prev.filter((id) => !currentUsers.find((user) => user.id === id))
+      );
+    } else {
+      // Select all users on current page
+      const currentPageUserIds = currentUsers.map((user) => user.id);
+      setSelectedUsers((prev) => [
+        ...new Set([...prev, ...currentPageUserIds]),
+      ]);
+    }
+    setSelectAll(!selectAll);
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedUsers.length === 0) {
+      toast.error("Please select users to delete");
+      return;
+    }
+    setShowDeleteSelectedModal(true);
+  };
+
+  const confirmDeleteSelected = async () => {
+    if (selectedUsers.length === 0) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch("/api/admin/users/bulk-delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIds: selectedUsers }),
+      });
+
+      if (response.ok) {
+        toast.success(`${selectedUsers.length} users deleted successfully`);
+        await fetchUsers();
+        setSelectedUsers([]);
+        setSelectAll(false);
+        setShowDeleteSelectedModal(false);
+        // Reset to page 1 if current page would be empty
+        const remainingUsers = users.length - selectedUsers.length;
+        const maxPage = Math.ceil(remainingUsers / usersPerPage);
+        if (currentPage > maxPage && maxPage > 0) {
+          setCurrentPage(maxPage);
+        }
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || "Failed to delete users");
+      }
+    } catch (error) {
+      console.error("Error deleting users:", error);
+      toast.error("Failed to delete users");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const getRoleDisplayName = (role: string) => {
@@ -153,8 +239,33 @@ export default function AdminUsersClient() {
     }
   };
 
+  // Calculate pagination
+  const totalPages = Math.ceil(users.length / usersPerPage);
+  const indexOfLastUser = currentPage * usersPerPage;
+  const indexOfFirstUser = indexOfLastUser - usersPerPage;
+  const currentUsers = users.slice(indexOfFirstUser, indexOfLastUser);
+
+  // Pagination handlers
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+    setSelectedUsers([]); // Clear selections when changing pages
+    setSelectAll(false);
+  };
+
+  // Update selectAll state when users or selectedUsers change
+  useEffect(() => {
+    if (currentUsers.length === 0) {
+      setSelectAll(false);
+    } else {
+      const currentPageUserIds = currentUsers.map((user) => user.id);
+      setSelectAll(
+        currentPageUserIds.every((id) => selectedUsers.includes(id))
+      );
+    }
+  }, [selectedUsers, currentUsers]);
+
   if (loading) {
-    return <AdminTableSkeleton rows={5} />;
+    return <AdminTableSkeleton rows={10} />;
   }
 
   return (
@@ -164,18 +275,31 @@ export default function AdminUsersClient() {
           <div className="flex items-center mb-4 sm:mb-0">
             <FiShield className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600 mr-2" />
             <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
-              Users Management
+              Users Management ({users.length})
             </h2>
-            <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-              {users.length} users
-            </span>
+            {selectedUsers.length > 0 && (
+              <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                {selectedUsers.length} selected
+              </span>
+            )}
           </div>
-          <div className="text-sm text-gray-600">
-            <FiUserCheck className="inline h-4 w-4 mr-1" />
-            <span className="hidden sm:inline">
-              Role assignment & user management
-            </span>
-            <span className="sm:hidden">Manage users</span>
+          <div className="flex items-center space-x-2">
+            {selectedUsers.length > 0 && (
+              <button
+                onClick={handleDeleteSelected}
+                className="flex items-center px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+              >
+                <FiTrash2 className="mr-2 h-4 w-4" />
+                Delete {selectedUsers.length} Users
+              </button>
+            )}
+            <div className="text-sm text-gray-600">
+              <FiUserCheck className="inline h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">
+                Role assignment & user management
+              </span>
+              <span className="sm:hidden">Manage users</span>
+            </div>
           </div>
         </div>
       </div>
@@ -185,6 +309,14 @@ export default function AdminUsersClient() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-4 sm:px-6 py-3 text-left">
+                <input
+                  type="checkbox"
+                  checked={selectAll}
+                  onChange={handleSelectAll}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+              </th>
               <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 User
               </th>
@@ -206,8 +338,16 @@ export default function AdminUsersClient() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {users.map((user) => (
+            {currentUsers.map((user) => (
               <tr key={user.id} className="hover:bg-gray-50">
+                <td className="px-4 sm:px-6 py-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedUsers.includes(user.id)}
+                    onChange={() => handleSelectUser(user.id)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                </td>
                 <td className="px-4 sm:px-6 py-4">
                   <div className="flex items-center">
                     <div className="flex-shrink-0 h-8 w-8 sm:h-10 sm:w-10">
@@ -305,6 +445,51 @@ export default function AdminUsersClient() {
           <p className="text-sm text-gray-400 mt-2">
             Users will appear here once they register
           </p>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {users.length > usersPerPage && (
+        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              Showing {indexOfFirstUser + 1} to{" "}
+              {Math.min(indexOfLastUser, users.length)} of {users.length} users
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+
+              <div className="flex items-center space-x-1">
+                {Array.from({ length: totalPages }, (_, i) => (
+                  <button
+                    key={i + 1}
+                    onClick={() => handlePageChange(i + 1)}
+                    className={`px-3 py-2 text-sm font-medium rounded-md ${
+                      currentPage === i + 1
+                        ? "bg-indigo-600 text-white"
+                        : "text-gray-500 bg-white border border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -625,6 +810,122 @@ export default function AdminUsersClient() {
                   setUserToDelete(null);
                 }}
                 className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+              >
+                <FiX className="mr-2 h-4 w-4" />
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showDeleteSelectedModal && (
+        <div
+          className="fixed inset-0 bg-black/50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowDeleteSelectedModal(false);
+            }
+          }}
+        >
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md mx-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">
+                Delete Multiple Users
+              </h3>
+              <button
+                onClick={() => setShowDeleteSelectedModal(false)}
+                className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                disabled={isDeleting}
+              >
+                <FiX className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-center mb-4">
+                <div className="flex-shrink-0 h-12 w-12 rounded-full bg-red-100 flex items-center justify-center">
+                  <FiTrash2 className="h-6 w-6 text-red-600" />
+                </div>
+                <div className="ml-4">
+                  <h4 className="text-lg font-medium text-gray-900">
+                    Delete {selectedUsers.length} Users?
+                  </h4>
+                  <p className="text-sm text-gray-500">
+                    This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
+                <p className="text-sm text-red-800 font-medium mb-2">
+                  You are about to delete {selectedUsers.length} users:
+                </p>
+                <div className="max-h-32 overflow-y-auto">
+                  {selectedUsers.slice(0, 5).map((userId) => {
+                    const user = users.find((u) => u.id === userId);
+                    return user ? (
+                      <div
+                        key={userId}
+                        className="flex items-center mb-2 last:mb-0"
+                      >
+                        <div className="flex-shrink-0 h-6 w-6">
+                          {user.name ? (
+                            <div className="h-6 w-6 rounded-full bg-red-100 flex items-center justify-center">
+                              <span className="text-xs font-medium text-red-800">
+                                {user.name.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                          ) : (
+                            <FiUser className="h-6 w-6 text-red-400" />
+                          )}
+                        </div>
+                        <div className="ml-2">
+                          <span className="text-xs text-red-800">
+                            {user.name || "No Name"} ({user.email})
+                          </span>
+                        </div>
+                      </div>
+                    ) : null;
+                  })}
+                  {selectedUsers.length > 5 && (
+                    <p className="text-xs text-red-600 mt-2">
+                      ...and {selectedUsers.length - 5} more users
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-sm text-gray-600">
+                Deleting these users will permanently remove their accounts,
+                order histories, and all associated data. This action cannot be
+                undone.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:space-x-3 space-y-2 sm:space-y-0 px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={confirmDeleteSelected}
+                disabled={isDeleting}
+                className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <FiTrash2 className="mr-2 h-4 w-4" />
+                    Delete {selectedUsers.length} Users
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setShowDeleteSelectedModal(false)}
+                disabled={isDeleting}
+                className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors disabled:opacity-50"
               >
                 <FiX className="mr-2 h-4 w-4" />
                 Cancel

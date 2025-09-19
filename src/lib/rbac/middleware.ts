@@ -3,13 +3,18 @@ import { getToken } from "next-auth/jwt";
 import { UserRole, getDefaultDashboardRoute } from "@/lib/rbac/roles";
 
 // Define protected routes and their required roles
-const PROTECTED_ROUTES: Record<string, UserRole[]> = {
-  "/admin": ["admin"],
-  "/delivery": ["admin", "deliveryman"],
-  "/packer": ["admin", "packer"],
-  "/accountant": ["admin", "accountant"],
-  "/account": ["admin", "deliveryman", "packer", "accountant", "user"],
-};
+// Using array to ensure proper order (more specific routes first)
+const PROTECTED_ROUTES: Array<{ route: string; roles: UserRole[] }> = [
+  { route: "/account/admin", roles: ["admin"] },
+  { route: "/admin", roles: ["admin"] },
+  { route: "/delivery", roles: ["admin", "deliveryman"] },
+  { route: "/packer", roles: ["admin", "packer"] },
+  { route: "/accountant", roles: ["admin", "accountant"] },
+  {
+    route: "/account",
+    roles: ["admin", "deliveryman", "packer", "accountant", "user"],
+  },
+];
 
 export async function withRoleAuth(
   request: NextRequest,
@@ -35,9 +40,10 @@ export function checkRouteAccess(
   userRole: UserRole
 ): boolean {
   // Check if the path starts with any protected route
-  for (const [route, allowedRoles] of Object.entries(PROTECTED_ROUTES)) {
+  // More specific routes are checked first due to array order
+  for (const { route, roles } of PROTECTED_ROUTES) {
     if (pathname.startsWith(route)) {
-      return allowedRoles.includes(userRole);
+      return roles.includes(userRole);
     }
   }
   return true; // Allow access to unprotected routes

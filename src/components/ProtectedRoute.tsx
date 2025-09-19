@@ -23,7 +23,9 @@ const ProtectedRoute = ({
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
-    if (status === "loading") return; // Still loading
+    if (status === "loading") {
+      return; // Still loading
+    }
 
     if (status === "unauthenticated" || !session?.user) {
       setIsRedirecting(true);
@@ -33,6 +35,8 @@ const ProtectedRoute = ({
       }, 1500);
 
       return () => clearTimeout(timer);
+    } else {
+      setIsRedirecting(false);
     }
   }, [session, status, router, fallbackPath]);
 
@@ -49,7 +53,11 @@ const ProtectedRoute = ({
   }
 
   // Show redirect message when unauthenticated
-  if (status === "unauthenticated" || !session?.user || isRedirecting) {
+  if (
+    status === "unauthenticated" ||
+    (!session?.user && status === "authenticated") ||
+    isRedirecting
+  ) {
     return (
       <Container className="py-8">
         <div className="text-center">
@@ -58,20 +66,45 @@ const ProtectedRoute = ({
             Authentication Required
           </h1>
           <p className="text-gray-600 mb-6">
-            You need to be signed in to access this page. Redirecting to sign
-            in...
+            You need to be signed in to access this page.
           </p>
-          <div className="flex items-center justify-center space-x-4">
-            <FiLoader className="animate-spin text-xl text-theme-color" />
-            <span className="text-gray-500">Redirecting...</span>
+
+          {/* Debug information */}
+          <div className="bg-gray-100 p-4 rounded mb-4 text-sm text-left">
+            <div>
+              <strong>Status:</strong> {status}
+            </div>
+            <div>
+              <strong>Has Session:</strong> {session ? "Yes" : "No"}
+            </div>
+            <div>
+              <strong>Has User:</strong> {session?.user ? "Yes" : "No"}
+            </div>
+            {session?.user && (
+              <div>
+                <strong>User Email:</strong> {session.user.email}
+              </div>
+            )}
           </div>
-          <div className="mt-6">
+
+          <div className="flex items-center justify-center space-x-4 mb-6">
+            <FiLoader className="animate-spin text-xl text-theme-color" />
+            <span className="text-gray-500">Checking authentication...</span>
+          </div>
+
+          <div className="space-x-4">
             <Link
               href="/auth/signin"
-              className="text-theme-color hover:text-theme-color/80 underline"
+              className="inline-block bg-theme-color text-white px-6 py-2 rounded hover:bg-theme-color/80"
             >
-              Click here if not redirected automatically
+              Sign In
             </Link>
+            <button
+              onClick={() => window.location.reload()}
+              className="inline-block bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600"
+            >
+              Refresh Page
+            </button>
           </div>
         </div>
       </Container>

@@ -12,7 +12,7 @@ import {
   doc,
   getDoc,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase/config";
+import { db } from "../../../firebase";
 import { UserRole } from "@/lib/rbac/roles";
 
 export const authConfig: NextAuthConfig = {
@@ -20,6 +20,13 @@ export const authConfig: NextAuthConfig = {
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code",
+        },
+      },
     }),
     GitHub({
       clientId: process.env.GITHUB_ID!,
@@ -75,6 +82,11 @@ export const authConfig: NextAuthConfig = {
   ],
   pages: {
     signIn: "/auth/signin",
+    error: "/auth/error",
+  },
+  debug: process.env.NODE_ENV === "development",
+  session: {
+    strategy: "jwt",
   },
   callbacks: {
     async signIn({ user, account, profile }) {
@@ -86,9 +98,11 @@ export const authConfig: NextAuthConfig = {
           const q = query(usersRef, where("email", "==", user.email));
           const querySnapshot = await getDocs(q);
 
+          let userId = null;
+
           // If user doesn't exist, create them in Firestore
           if (querySnapshot.empty && user.email) {
-            await addDoc(usersRef, {
+            const docRef = await addDoc(usersRef, {
               name: user.name || "",
               email: user.email,
               image: user.image || "",
@@ -111,48 +125,76 @@ export const authConfig: NextAuthConfig = {
               wishlist: [],
               orders: [],
             });
+            userId = docRef.id;
+          } else {
+            // User exists, get their ID
+            userId = querySnapshot.docs[0].id;
           }
+
+          // Store the Firestore document ID for later use
+          user.id = userId;
         } catch (error) {
-          console.error("Error creating OAuth user:", error);
-          return false; // Prevent sign-in if there's an error
+          console.error("Error handling OAuth user:", error);
+          // Don't prevent sign-in, just log the error
+          // OAuth should still work even if Firestore write fails
         }
       }
       return true;
     },
     async jwt({ token, user, account }) {
+      // On first sign in, user object is available
       if (user) {
-        token.id = user.id;
-        token.role = user.role || "user";
-        // Store the image in the token for persistence
+        token.id = user.id || token.sub || `user_${Date.now()}`;
+        token.role = "user"; // Default role for OAuth users
+        token.email = user.email;
         if (user.image) {
           token.picture = user.image;
         }
       }
 
-      // If we don't have role in token, fetch it from database
-      if (token.id && !token.role) {
-        try {
-          const userDoc = await getDoc(doc(db, "users", token.id as string));
-          if (userDoc.exists()) {
-            token.role = userDoc.data().role || "user";
-          }
-        } catch (error) {
-          console.error("Error fetching user role:", error);
-          token.role = "user";
+      // Ensure we always have an ID for the token
+      if (!token.id) {
+        if (token.sub) {
+          token.id = token.sub;
+        } else if (token.email) {
+          token.id = `temp_${token.email.replace(/[^a-zA-Z0-9]/g, "_")}`;
         }
+      }
+
+      // Ensure we always have a role
+      if (!token.role) {
+        token.role = "user";
       }
 
       return token;
     },
     async session({ session, token }) {
       if (token && session.user) {
-        session.user.id = token.id as string;
-        session.user.role = token.role as UserRole;
-        // Ensure image is properly passed through
+        session.user.id = (token.id as string) || (token.sub as string);
+        session.user.email = token.email as string;
+
+        // Fetch the latest user data from Firestore to get the correct role
+        try {
+          const userDoc = await getDoc(doc(db, "users", session.user.id));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            session.user.role = (userData.role as UserRole) || "user";
+            session.user.name = userData.name || session.user.name;
+            session.user.image = userData.image || (token.picture as string);
+          } else {
+            session.user.role = (token.role as UserRole) || "user";
+          }
+        } catch (error) {
+          console.error("Error fetching user data from Firestore:", error);
+          session.user.role = (token.role as UserRole) || "user";
+        }
+
+        // Ensure image is properly passed through if not from Firestore
         if (token.picture && !session.user.image) {
           session.user.image = token.picture as string;
         }
       }
+
       return session;
     },
   },

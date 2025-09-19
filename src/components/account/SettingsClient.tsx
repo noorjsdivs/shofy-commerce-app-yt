@@ -1,10 +1,8 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { signOut } from "next-auth/react";
 
 export default function SettingsClient() {
-  const { data: session } = useSession();
-
   const handleDeleteAccount = () => {
     if (
       window.confirm(

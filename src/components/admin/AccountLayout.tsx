@@ -76,24 +76,6 @@ export default function AccountLayout({ children }: AccountLayoutProps) {
       path: "/account/admin",
     },
     {
-      id: "users",
-      label: "Users",
-      icon: "👥",
-      path: "/account/admin/users",
-    },
-    {
-      id: "admin-orders",
-      label: "All Orders",
-      icon: "📦",
-      path: "/account/admin/orders",
-    },
-    {
-      id: "analytics",
-      label: "Analytics",
-      icon: "📈",
-      path: "/account/admin/analytics",
-    },
-    {
       id: "profile",
       label: "Profile",
       icon: "👤",

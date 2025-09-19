@@ -3,7 +3,7 @@ import { logo } from "@/assets";
 import SocialLink from "./SocialLink";
 import Title from "./Title";
 import { FaFacebook } from "react-icons/fa";
-import { navigation } from "@/constants";
+import { InfoNavigation, navigation } from "@/constants";
 import Link from "next/link";
 import Image from "next/image";
 import { GoDotFill } from "react-icons/go";
@@ -42,7 +42,7 @@ const Footer = () => {
         <div>
           <Title>Information</Title>
           <div className="mt-3 flex flex-col gap-y-2">
-            {navigation?.map((item) => (
+            {InfoNavigation?.map((item) => (
               <Link
                 key={item?.title}
                 href={item?.href}

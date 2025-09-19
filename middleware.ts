@@ -36,24 +36,28 @@ export async function middleware(request: any) {
   const { pathname } = request.nextUrl;
   const session = await auth();
 
-  // Log for debugging (remove in production)
-  console.log(
-    `Middleware: ${pathname}, User: ${
-      session?.user?.email || "Not logged in"
-    }, Role: ${session?.user?.role || "No role"}`
-  );
-
   // Restrict protected routes to logged-in users
   if (protectedRoutes.some((route) => pathname.startsWith(route))) {
     if (!session?.user) {
-      console.log(`Redirecting ${pathname} to signin - No session`);
       return NextResponse.redirect(new URL("/auth/signin", request.url));
     }
 
     // Check role-based access
     const userRole = session.user.role as UserRole;
+
+    // Special explicit check for admin routes
+    if (pathname.startsWith("/account/admin")) {
+      if (userRole !== "admin") {
+        return NextResponse.redirect(new URL("/account", request.url));
+      }
+    }
+
     if (!checkRouteAccess(pathname, userRole)) {
-      console.log(`Access denied for role ${userRole} to ${pathname}`);
+      // Special case: redirect non-admin users trying to access /account/admin to /account
+      if (pathname.startsWith("/account/admin") && userRole !== "admin") {
+        return NextResponse.redirect(new URL("/account", request.url));
+      }
+
       return NextResponse.redirect(new URL("/unauthorized", request.url));
     }
   }

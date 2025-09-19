@@ -29,8 +29,6 @@ export async function POST(request: NextRequest) {
       expand: ["line_items", "line_items.data.price.product"],
     });
 
-    console.log("Session metadata:", session.metadata);
-
     if (session.payment_status !== "paid") {
       return NextResponse.json(
         { success: false, error: "Payment not completed" },
@@ -77,7 +75,6 @@ export async function POST(request: NextRequest) {
     if (session.metadata?.shippingAddress) {
       try {
         shippingAddress = JSON.parse(session.metadata.shippingAddress);
-        console.log("Parsed shipping address:", shippingAddress);
       } catch (e) {
         console.warn("Failed to parse shipping address from metadata:", e);
       }

@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
-import { FaUser, FaBox, FaHeart, FaCog, FaSignOutAlt } from "react-icons/fa";
+import {
+  FaUser,
+  FaBox,
+  FaHeart,
+  FaCog,
+  FaSignOutAlt,
+  FaShieldAlt,
+} from "react-icons/fa";
 import { signOut } from "next-auth/react";
 
 interface UserProfileDropdownProps {
@@ -10,6 +17,7 @@ interface UserProfileDropdownProps {
     name?: string | null;
     email?: string | null;
     image?: string | null;
+    role?: string | null;
   };
 }
 
@@ -91,6 +99,20 @@ const UserProfileDropdown = ({ user }: UserProfileDropdownProps) => {
     },
   ];
 
+  // Add admin dashboard link for admin users
+  const adminMenuItems =
+    user?.role === "admin"
+      ? [
+          {
+            href: "/account/admin",
+            icon: FaShieldAlt,
+            label: "Admin Dashboard",
+          },
+        ]
+      : [];
+
+  const allMenuItems = [...menuItems, ...adminMenuItems];
+
   return (
     <div
       ref={dropdownRef}
@@ -138,12 +160,16 @@ const UserProfileDropdown = ({ user }: UserProfileDropdownProps) => {
 
             {/* Menu Items */}
             <div className="py-1">
-              {menuItems.map((item) => (
+              {allMenuItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={() => setIsOpen(false)}
-                  className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-sky-color transition-colors duration-200"
+                  className={`flex items-center gap-3 px-4 py-2 text-sm transition-colors duration-200 ${
+                    item.label === "Admin Dashboard"
+                      ? "text-red-600 hover:bg-red-50 hover:text-red-700 border-t border-gray-100 mt-1 pt-3"
+                      : "text-gray-700 hover:bg-gray-50 hover:text-sky-color"
+                  }`}
                 >
                   <item.icon className="w-4 h-4" />
                   {item.label}

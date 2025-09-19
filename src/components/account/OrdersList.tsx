@@ -9,6 +9,7 @@ import {
   FiPackage,
   FiCalendar,
   FiCreditCard,
+  FiTrash2,
 } from "react-icons/fi";
 import Link from "next/link";
 
@@ -49,6 +50,9 @@ export default function OrdersList({
   const [error, setError] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (session?.user?.email) {
@@ -114,6 +118,46 @@ export default function OrdersList({
   const closeOrderModal = () => {
     setSelectedOrder(null);
     setIsModalOpen(false);
+  };
+
+  const handleSelectOrder = (orderId: string) => {
+    setSelectedOrders((prev) =>
+      prev.includes(orderId)
+        ? prev.filter((id) => id !== orderId)
+        : [...prev, orderId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedOrders(
+      selectedOrders.length === orders.length
+        ? []
+        : orders.map((order) => order.id)
+    );
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedOrders.length === 0) return;
+
+    setIsDeleting(true);
+    setShowDeleteConfirm(false);
+    try {
+      // Here you would implement the actual delete logic
+      // For now, just filter out the selected orders
+      const updatedOrders = orders.filter(
+        (order) => !selectedOrders.includes(order.id)
+      );
+      setOrders(updatedOrders);
+      setSelectedOrders([]);
+      onOrdersChange?.(updatedOrders);
+
+      // In a real app, you would call an API to delete the orders
+      // await deleteOrders(selectedOrders);
+    } catch (error) {
+      console.error("Error deleting orders:", error);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const OrderDetailsModal = () => {
@@ -344,7 +388,7 @@ export default function OrdersList({
   }
 
   return (
-    <div>
+    <div className="w-full min-w-0">
       {showHeader && (
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-gray-900">Order History</h2>
@@ -354,66 +398,112 @@ export default function OrdersList({
         </div>
       )}
 
+      {/* Delete Selected Button */}
+      {selectedOrders.length > 0 && (
+        <div className="mb-4 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <span className="text-sm text-blue-700">
+              {selectedOrders.length} order
+              {selectedOrders.length !== 1 ? "s" : ""} selected
+            </span>
+          </div>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={isDeleting}
+            className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+          >
+            <FiTrash2 className="w-4 h-4 mr-2" />
+            {isDeleting
+              ? "Deleting..."
+              : `Delete Selected (${selectedOrders.length})`}
+          </button>
+        </div>
+      )}
+
       {/* Desktop Table View */}
-      <div className="hidden lg:block">
-        <div className="overflow-hidden bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg">
-          <table className="min-w-full divide-y divide-gray-300">
+      <div className="hidden lg:block w-full max-w-7xl mx-auto">
+        <div className="bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg w-full">
+          <table className="w-full divide-y divide-gray-300 table-fixed">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left w-12">
+                  <input
+                    type="checkbox"
+                    checked={
+                      selectedOrders.length === orders.length &&
+                      orders.length > 0
+                    }
+                    onChange={handleSelectAll}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                   Order
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                   Date
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                   Items
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                   Total
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {orders.map((order) => (
-                <tr key={order.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
+                <tr
+                  key={order.id}
+                  className={`hover:bg-gray-50 ${
+                    selectedOrders.includes(order.id) ? "bg-blue-50" : ""
+                  }`}
+                >
+                  <td className="px-3 py-4 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={selectedOrders.includes(order.id)}
+                      onChange={() => handleSelectOrder(order.id)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </td>
+                  <td className="px-3 py-4 whitespace-nowrap">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">
+                      <div className="text-sm font-medium text-gray-900 truncate">
                         #{order.orderId}
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-500 truncate">
                         {order.customerEmail}
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-3 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
                       {formatDate(order.createdAt)}
                     </div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-3 py-4 whitespace-nowrap">
                     <div className="flex items-center space-x-2">
-                      <div className="flex -space-x-2 overflow-hidden">
-                        {order.items.slice(0, 3).map((item, index) => (
+                      <div className="flex -space-x-1 overflow-hidden flex-shrink-0">
+                        {order.items.slice(0, 2).map((item, index) => (
                           <div
                             key={index}
-                            className="inline-block h-8 w-8 rounded-full ring-2 ring-white overflow-hidden"
+                            className="inline-block h-6 w-6 rounded-full ring-2 ring-white overflow-hidden flex-shrink-0"
                           >
                             {item.images && item.images[0] ? (
                               <img
                                 src={item.images[0]}
                                 alt={item.name}
-                                className="h-8 w-8 rounded-full object-cover"
+                                className="h-6 w-6 rounded-full object-cover"
                               />
                             ) : (
-                              <div className="h-8 w-8 bg-gray-300 rounded-full flex items-center justify-center">
+                              <div className="h-6 w-6 bg-gray-300 rounded-full flex items-center justify-center">
                                 <span className="text-xs font-medium text-gray-600">
                                   {item.name?.charAt(0)?.toUpperCase() || "P"}
                                 </span>
@@ -422,13 +512,12 @@ export default function OrdersList({
                           </div>
                         ))}
                       </div>
-                      <span className="text-sm text-gray-600">
-                        {order.items.length} item
-                        {order.items.length !== 1 ? "s" : ""}
+                      <span className="text-xs text-gray-600 truncate">
+                        {order.items.length}
                       </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-3 py-4 whitespace-nowrap">
                     <span
                       className={`inline-flex px-2 py-1 text-xs font-medium rounded-full capitalize ${getStatusColor(
                         order.status
@@ -436,32 +525,30 @@ export default function OrdersList({
                     >
                       {order.status}
                     </span>
-                    <div className="text-xs text-gray-500 mt-1">
-                      Payment: {order.paymentStatus}
+                    <div className="text-xs text-gray-500 mt-1 truncate">
+                      {order.paymentStatus}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-3 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
                       <PriceFormat amount={parseFloat(order.amount)} />
                     </div>
-                    <div className="text-xs text-gray-500 uppercase">
-                      {order.currency}
-                    </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex space-x-2">
+                  <td className="px-3 py-4">
+                    <div className="flex flex-col space-y-1">
                       <button
                         onClick={() => openOrderModal(order)}
-                        className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                        className="inline-flex items-center justify-center px-2 py-1 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                        title="View Details"
                       >
-                        <FiEye className="w-3 h-3 mr-1" />
-                        View Details
+                        <FiEye className="w-3 h-3" />
                       </button>
                       {order.status.toLowerCase() === "confirmed" &&
                         order.paymentStatus.toLowerCase() === "paid" && (
                           <Link
                             href={`/account/orders/${order.id}`}
-                            className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-white bg-theme-color hover:bg-theme-color/90 transition-colors"
+                            className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                            title="Track Order"
                           >
                             Track
                           </Link>
@@ -469,9 +556,10 @@ export default function OrdersList({
                       {order.paymentStatus.toLowerCase() === "pending" && (
                         <Link
                           href={`/checkout?orderId=${order.id}`}
-                          className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 transition-colors"
+                          className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 transition-colors"
+                          title="Complete Payment"
                         >
-                          Pay Now
+                          Pay
                         </Link>
                       )}
                     </div>
@@ -484,20 +572,32 @@ export default function OrdersList({
       </div>
 
       {/* Mobile Card View */}
-      <div className="lg:hidden space-y-4">
+      <div className="lg:hidden space-y-4 w-full">
         {orders.map((order) => (
           <div
             key={order.id}
-            className="bg-white rounded-lg shadow border border-gray-200 p-4"
+            className={`bg-white rounded-lg shadow border border-gray-200 p-4 ${
+              selectedOrders.includes(order.id)
+                ? "ring-2 ring-blue-500 bg-blue-50"
+                : ""
+            }`}
           >
             <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-sm font-medium text-gray-900">
-                  #{order.orderId}
-                </h3>
-                <p className="text-xs text-gray-500">
-                  {formatDate(order.createdAt)}
-                </p>
+              <div className="flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  checked={selectedOrders.includes(order.id)}
+                  onChange={() => handleSelectOrder(order.id)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <div>
+                  <h3 className="text-sm font-medium text-gray-900">
+                    #{order.orderId}
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    {formatDate(order.createdAt)}
+                  </p>
+                </div>
               </div>
               <span
                 className={`px-2 py-1 text-xs font-medium rounded-full capitalize ${getStatusColor(
@@ -543,22 +643,23 @@ export default function OrdersList({
               </div>
             </div>
 
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-2 sm:space-y-0">
               <div className="text-xs text-gray-500">
                 Payment: {order.paymentStatus}
               </div>
-              <div className="flex space-x-2">
+              <div className="flex flex-wrap gap-2 justify-end">
                 <button
                   onClick={() => openOrderModal(order)}
-                  className="px-3 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                  className="flex items-center justify-center px-3 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 transition-colors whitespace-nowrap"
                 >
-                  View Details
+                  <FiEye className="w-3 h-3 mr-1" />
+                  View
                 </button>
                 {order.status.toLowerCase() === "confirmed" &&
                   order.paymentStatus.toLowerCase() === "paid" && (
                     <Link
                       href={`/account/orders/${order.id}`}
-                      className="px-3 py-1 text-xs bg-theme-color text-white rounded hover:bg-theme-color/90 transition-colors"
+                      className="flex items-center justify-center px-3 py-1 text-xs bg-theme-color text-white rounded hover:bg-theme-color/90 transition-colors whitespace-nowrap"
                     >
                       Track
                     </Link>
@@ -566,7 +667,7 @@ export default function OrdersList({
                 {order.paymentStatus.toLowerCase() === "pending" && (
                   <Link
                     href={`/checkout?orderId=${order.id}`}
-                    className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                    className="flex items-center justify-center px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors whitespace-nowrap"
                   >
                     Pay Now
                   </Link>
@@ -579,6 +680,44 @@ export default function OrdersList({
 
       {/* Order Details Modal */}
       <OrderDetailsModal />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowDeleteConfirm(false)}
+          ></div>
+          <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
+              <FiTrash2 className="w-6 h-6 text-red-600" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 text-center mb-2">
+              Delete Selected Orders
+            </h3>
+            <p className="text-sm text-gray-500 text-center mb-6">
+              Are you sure you want to delete {selectedOrders.length} order
+              {selectedOrders.length !== 1 ? "s" : ""}? This action cannot be
+              undone.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteSelected}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -10,6 +10,74 @@ export const USER_ROLES = {
 
 export type UserRole = (typeof USER_ROLES)[keyof typeof USER_ROLES];
 
+export function getDefaultPageForRole(role: UserRole): string {
+  switch (role) {
+    case USER_ROLES.ADMIN:
+      return "/admin";
+    case USER_ROLES.ACCOUNT:
+      return "/account-dashboard";
+    case USER_ROLES.PACKER:
+      return "/packer-dashboard";
+    case USER_ROLES.DELIVERYMAN:
+      return "/delivery-dashboard";
+    case USER_ROLES.USER:
+    default:
+      return "/account";
+  }
+}
+
+// Additional utility functions for user role checking
+import { FirestoreUser } from "@/lib/firebase/userService";
+
+export function hasRole(user: FirestoreUser | null, role: string): boolean {
+  return user?.role === role;
+}
+
+export function hasAnyRole(
+  user: FirestoreUser | null,
+  roles: string[]
+): boolean {
+  return user ? roles.includes(user.role) : false;
+}
+
+export function isAdminUser(user: FirestoreUser | null): boolean {
+  return hasRole(user, USER_ROLES.ADMIN);
+}
+
+export function canAccessAdminPanel(user: FirestoreUser | null): boolean {
+  return hasAnyRole(user, [USER_ROLES.ADMIN, USER_ROLES.ACCOUNT]);
+}
+
+export function canManageOrders(user: FirestoreUser | null): boolean {
+  return hasAnyRole(user, [
+    USER_ROLES.ADMIN,
+    USER_ROLES.ACCOUNT,
+    USER_ROLES.PACKER,
+  ]);
+}
+
+export function canAccessDelivery(user: FirestoreUser | null): boolean {
+  return hasAnyRole(user, [
+    USER_ROLES.ADMIN,
+    USER_ROLES.DELIVERYMAN,
+    USER_ROLES.ACCOUNT,
+  ]);
+}
+
+export function getUserDisplayRole(user: FirestoreUser | null): string {
+  if (!user) return "Guest";
+
+  const roleDisplayMap: Record<string, string> = {
+    [USER_ROLES.ADMIN]: "Administrator",
+    [USER_ROLES.ACCOUNT]: "Account Manager",
+    [USER_ROLES.PACKER]: "Packer",
+    [USER_ROLES.DELIVERYMAN]: "Delivery Personnel",
+    [USER_ROLES.USER]: "Customer",
+  };
+
+  return roleDisplayMap[user.role] || user.role;
+}
+
 export const ROLE_PERMISSIONS = {
   [USER_ROLES.ADMIN]: {
     orders: {
