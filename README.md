@@ -12,8 +12,8 @@ A modern, full-stack eCommerce application built with **Next.js 15**, **TypeScri
 
 ## 🚀 Quick Start
 
-# 🌟 View Youtube Video for setup
-- **Frontend**: [Live Demo Link]([https://shofy.reactbd.com](https://youtu.be/pqt-7cWJfiI)) _(if available)_
+## 🌟 View Youtube Video for setup
+- **Frontend**: [Youtube setup Link](https://youtu.be/pqt-7cWJfiI) _(if available)_
 
 Get your eCommerce store running in minutes:
 
