@@ -18,7 +18,7 @@ const ProductPrice = ({ regularPrice, discountedPrice, product }: any) => {
   return (
     <div className="flex items-center gap-2">
       <PriceFormat
-        className="text-gray-500 line-through font-normal"
+        className="font-semibold text-sky-color"
         amount={
           existingProduct
             ? discountedPrice * existingProduct?.quantity!
@@ -26,7 +26,7 @@ const ProductPrice = ({ regularPrice, discountedPrice, product }: any) => {
         }
       />
       <PriceFormat
-        className="font-semibold text-sky-color"
+        className="text-gray-500 line-through font-normal"
         amount={
           existingProduct
             ? regularPrice * existingProduct?.quantity!

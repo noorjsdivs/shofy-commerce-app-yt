@@ -16,7 +16,6 @@ import {
   FiTruck,
 } from "react-icons/fi";
 import Link from "next/link";
-import toast from "react-hot-toast";
 
 const CheckoutPage = () => {
   const { data: session } = useSession();
@@ -90,11 +89,87 @@ const CheckoutPage = () => {
   };
 
   const handleCashOnDelivery = async () => {
-    toast.success("Cash on delivery is on the way");
+    try {
+      setPaymentProcessing(true);
+
+      // Update order payment status to completed for COD
+      const response = await fetch("/api/orders/update-payment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          orderId: existingOrder.id,
+          paymentStatus: "cash_on_delivery",
+          status: "confirmed",
+        }),
+      });
+
+      if (response.ok) {
+        // Redirect to order details page
+        router.push(`/account/orders/${existingOrder.id}`);
+      } else {
+        throw new Error("Failed to update order");
+      }
+    } catch (error) {
+      console.error("Error processing COD:", error);
+      alert("Failed to process Cash on Delivery. Please try again.");
+    } finally {
+      setPaymentProcessing(false);
+    }
   };
 
   const handleStripePayment = async () => {
-    toast.success("Stripe Payment on delivery is on the way");
+    try {
+      setPaymentProcessing(true);
+      const stripe = await loadStripe(
+        process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
+      );
+
+      const response = await fetch("/api/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          items: existingOrder.items,
+          email: session?.user?.email,
+          shippingAddress: existingOrder.shippingAddress,
+          orderId: existingOrder.id,
+          orderAmount: existingOrder.amount,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Checkout API error:", errorData);
+        throw new Error(errorData.error || "Failed to create checkout session");
+      }
+
+      const checkoutSession = await response.json();
+
+      if (!checkoutSession.id) {
+        throw new Error("No session ID returned from checkout");
+      }
+
+      const result: any = await stripe?.redirectToCheckout({
+        sessionId: checkoutSession.id,
+      });
+
+      if (result.error) {
+        console.error("Stripe redirect error:", result.error);
+        alert(result.error.message);
+      }
+    } catch (error) {
+      console.error("Error processing payment:", error);
+      alert(
+        `Payment processing failed: ${
+          error instanceof Error ? error.message : "Please try again."
+        }`
+      );
+    } finally {
+      setPaymentProcessing(false);
+    }
   };
 
   if (loading) {
