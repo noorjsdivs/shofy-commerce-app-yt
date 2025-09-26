@@ -34,7 +34,7 @@ export default function AdminNotFound() {
             </span>
           </p>
           <p className="text-gray-600 mb-6">
-            The page you&apos;re trying to access has been restricted to premium
+            The page you're trying to access has been restricted to premium
             users only.
           </p>
 

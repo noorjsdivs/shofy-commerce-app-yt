@@ -1,10 +1,8 @@
-import Image from "next/image";
-
 const MainLoader = () => {
   return (
     <div className="w-full min-h-screen absolute top-0 left-0 bg-white flex flex-col gap-2 items-center justify-center z-50">
       <div className="w-52 p-4 rounded-lg bg-amazonBlue flex items-center justify-center relative">
-        <Image
+        <img
           src={"/logo.png"}
           alt="Logo"
           className="w-48 h-auto object-contain"
